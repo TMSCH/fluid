@@ -11,13 +11,16 @@ interface ConfigContextValue {
   isConfigured: boolean;
 }
 
-const defaultConfig: AppConfig = {
-  llm: {
-    apiKey: '',
-    model: 'gpt-4o',
-    baseUrl: 'https://api.openai.com/v1',
-  },
-};
+const DEFAULT_BASE_URL = 'https://api.openai.com/v1';
+
+function getEnvApiKey(): string {
+  // Expo public env vars are inlined at build time via process.env
+  try {
+    return process.env.EXPO_PUBLIC_OPENAI_API_KEY || '';
+  } catch {
+    return '';
+  }
+}
 
 function getGlobal(key: string): string | undefined {
   if (typeof globalThis !== 'undefined') {
@@ -29,6 +32,19 @@ function getGlobal(key: string): string | undefined {
   return undefined;
 }
 
+function resolveBaseUrl(): string {
+  // E2E tests can inject a CORS proxy URL
+  return getGlobal('__FLUID_BASE_URL') || DEFAULT_BASE_URL;
+}
+
+const defaultConfig: AppConfig = {
+  llm: {
+    apiKey: getEnvApiKey(),
+    model: 'gpt-4o',
+    baseUrl: resolveBaseUrl(),
+  },
+};
+
 const ConfigContext = createContext<ConfigContextValue>({
   config: defaultConfig,
   updateConfig: () => {},
@@ -39,21 +55,15 @@ export function ConfigProvider({ children }: { children: React.ReactNode }) {
   const [config, setConfig] = useState<AppConfig>(defaultConfig);
 
   function updateConfig(updates: Partial<AppConfig>) {
-    setConfig((prev) => {
-      // Check for injected base URL (used by E2E tests to route through CORS proxy)
-      const injectedBaseUrl = getGlobal('__FLUID_BASE_URL');
-
-      return {
-        ...prev,
-        ...updates,
-        llm: {
-          ...prev.llm,
-          ...(updates.llm || {}),
-          // Use injected base URL if available, otherwise use the provided or default
-          baseUrl: injectedBaseUrl || updates.llm?.baseUrl || prev.llm.baseUrl,
-        },
-      };
-    });
+    setConfig((prev) => ({
+      ...prev,
+      ...updates,
+      llm: {
+        ...prev.llm,
+        ...(updates.llm || {}),
+        baseUrl: resolveBaseUrl() || updates.llm?.baseUrl || prev.llm.baseUrl,
+      },
+    }));
   }
 
   const isConfigured = Boolean(config.llm.apiKey);
