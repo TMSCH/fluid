@@ -1,7 +1,6 @@
 import * as repo from '../storage/repositories';
 import { callLLM, buildCreatePrompt, buildInteractionPrompt } from '../llm';
 import type { LLMClientConfig } from '../llm';
-import { validateLLMResponse } from '../validation/validator';
 import { takeSnapshot } from '../rollback/snapshot-manager';
 import type { Project, ProjectMessage } from '../../types/project';
 import type { AppDefinition } from '../../types/app-definition';
@@ -28,11 +27,14 @@ export async function loadProjectContext(projectId: string): Promise<ProjectCont
 
   if (!defRow || !stateRow) return null;
 
+  const definition: AppDefinition = JSON.parse(defRow.definition_json);
+  const state: AppState = JSON.parse(stateRow.state_json);
+
   return {
     project,
-    definition: JSON.parse(defRow.definition_json),
-    state: JSON.parse(stateRow.state_json),
-    ui: JSON.parse(defRow.definition_json).ui_schema ?? { type: 'screen', children: [] } as UIScreenNode,
+    definition,
+    state,
+    ui: definition.ui_schema ?? { type: 'screen', children: [] } as UIScreenNode,
     messages,
   };
 }
@@ -100,7 +102,9 @@ export async function sendChatMessage(
     { userMessage }
   );
 
-  const llmResponse = await callLLM(promptMessages, llmConfig);
+  const llmResponse = await callLLM(promptMessages, llmConfig, {
+    currentState: ctx.state,
+  });
   await applyLLMResponse(projectId, ctx.project.current_version, llmResponse);
 
   return llmResponse;
@@ -131,7 +135,11 @@ export async function submitUIAction(
     { submittedData, submitAction: action }
   );
 
-  const llmResponse = await callLLM(promptMessages, llmConfig);
+  const llmResponse = await callLLM(promptMessages, llmConfig, {
+    currentState: ctx.state,
+    action,
+    submittedData,
+  });
   await applyLLMResponse(projectId, ctx.project.current_version, llmResponse);
 
   return llmResponse;

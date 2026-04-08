@@ -19,6 +19,16 @@ const defaultConfig: AppConfig = {
   },
 };
 
+function getGlobal(key: string): string | undefined {
+  if (typeof globalThis !== 'undefined') {
+    return (globalThis as Record<string, unknown>)[key] as string | undefined;
+  }
+  if (typeof window !== 'undefined') {
+    return (window as unknown as Record<string, unknown>)[key] as string | undefined;
+  }
+  return undefined;
+}
+
 const ConfigContext = createContext<ConfigContextValue>({
   config: defaultConfig,
   updateConfig: () => {},
@@ -26,29 +36,24 @@ const ConfigContext = createContext<ConfigContextValue>({
 });
 
 export function ConfigProvider({ children }: { children: React.ReactNode }) {
-  const [config, setConfig] = useState<AppConfig>(() => {
-    // Allow injection via global for testing
-    if (typeof globalThis !== 'undefined' && (globalThis as Record<string, unknown>).__FLUID_API_KEY) {
-      return {
-        ...defaultConfig,
-        llm: {
-          ...defaultConfig.llm,
-          apiKey: (globalThis as Record<string, unknown>).__FLUID_API_KEY as string,
-        },
-      };
-    }
-    return defaultConfig;
-  });
+  const [config, setConfig] = useState<AppConfig>(defaultConfig);
 
   function updateConfig(updates: Partial<AppConfig>) {
-    setConfig((prev) => ({
-      ...prev,
-      ...updates,
-      llm: {
-        ...prev.llm,
-        ...(updates.llm || {}),
-      },
-    }));
+    setConfig((prev) => {
+      // Check for injected base URL (used by E2E tests to route through CORS proxy)
+      const injectedBaseUrl = getGlobal('__FLUID_BASE_URL');
+
+      return {
+        ...prev,
+        ...updates,
+        llm: {
+          ...prev.llm,
+          ...(updates.llm || {}),
+          // Use injected base URL if available, otherwise use the provided or default
+          baseUrl: injectedBaseUrl || updates.llm?.baseUrl || prev.llm.baseUrl,
+        },
+      };
+    });
   }
 
   const isConfigured = Boolean(config.llm.apiKey);

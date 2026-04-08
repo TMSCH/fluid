@@ -36,8 +36,13 @@ interface FormState {
   [formId: string]: Record<string, unknown>;
 }
 
+interface FormMeta {
+  [formId: string]: string; // formId -> submitAction
+}
+
 export function DSLRenderer({ schema, onAction }: RendererProps) {
   const [formState, setFormState] = useState<FormState>({});
+  const formMetaRef = React.useRef<FormMeta>({});
 
   const updateFormField = useCallback((formId: string, fieldId: string, value: unknown) => {
     setFormState((prev) => ({
@@ -222,7 +227,8 @@ export function DSLRenderer({ schema, onAction }: RendererProps) {
         ]}
         onPress={() => {
           if (node.action === 'submit_form' && currentFormId) {
-            handleSubmitForm(currentFormId, currentFormId);
+            const submitAction = formMetaRef.current[currentFormId] || currentFormId;
+            handleSubmitForm(currentFormId, submitAction);
           } else {
             onAction(node.action);
           }
@@ -242,6 +248,7 @@ export function DSLRenderer({ schema, onAction }: RendererProps) {
   }
 
   function renderForm(node: UIFormNode): React.ReactNode {
+    formMetaRef.current[node.id] = node.submitAction;
     return (
       <View style={styles.form} testID={`form-${node.id}`}>
         {renderChildren(node.children, node.id)}
