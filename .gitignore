@@ -41,6 +41,7 @@ yarn-error.*
 /android
 
 # Playwright
+test-results/
 playwright/test-results/
 playwright/playwright-report/
 
