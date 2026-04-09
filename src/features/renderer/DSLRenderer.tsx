@@ -226,9 +226,12 @@ export function DSLRenderer({ schema, onAction }: RendererProps) {
           !isPrimary && !isDanger && styles.buttonSecondary,
         ]}
         onPress={() => {
-          if (node.action === 'submit_form' && currentFormId) {
-            const submitAction = formMetaRef.current[currentFormId] || currentFormId;
-            handleSubmitForm(currentFormId, submitAction);
+          if (currentFormId) {
+            // Button is inside a form — always collect form data
+            const action = node.action === 'submit_form'
+              ? (formMetaRef.current[currentFormId] || currentFormId)
+              : node.action;
+            handleSubmitForm(currentFormId, action);
           } else {
             onAction(node.action);
           }
