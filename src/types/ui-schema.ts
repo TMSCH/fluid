@@ -7,6 +7,7 @@ export type UIComponentType =
   | 'input'
   | 'textarea'
   | 'number_input'
+  | 'checkbox'
   | 'toggle'
   | 'button'
   | 'form'
@@ -67,11 +68,22 @@ export interface UINumberInputNode extends UIBaseNode {
   step?: number;
 }
 
+export interface UICheckboxNode extends UIBaseNode {
+  type: 'checkbox';
+  id: string;
+  label?: string;
+  value?: boolean;
+  /** If true, changing this field triggers an immediate save to the LLM */
+  autoSubmit?: boolean;
+}
+
 export interface UIToggleNode extends UIBaseNode {
   type: 'toggle';
   id: string;
   label?: string;
   value?: boolean;
+  /** If true, changing this field triggers an immediate save to the LLM */
+  autoSubmit?: boolean;
 }
 
 export interface UIButtonNode extends UIBaseNode {
@@ -112,6 +124,8 @@ export interface UISelectNode extends UIBaseNode {
   label?: string;
   value?: string;
   options: Array<{ label: string; value: string }>;
+  /** If true, changing this field triggers an immediate save to the LLM */
+  autoSubmit?: boolean;
 }
 
 export interface UIDatePickerNode extends UIBaseNode {
@@ -128,6 +142,7 @@ export type UINode =
   | UIInputNode
   | UITextareaNode
   | UINumberInputNode
+  | UICheckboxNode
   | UIToggleNode
   | UIButtonNode
   | UIFormNode

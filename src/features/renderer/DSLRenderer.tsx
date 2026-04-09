@@ -17,6 +17,7 @@ import type {
   UIInputNode,
   UITextareaNode,
   UINumberInputNode,
+  UICheckboxNode,
   UIToggleNode,
   UIButtonNode,
   UIFormNode,
@@ -29,7 +30,10 @@ import type {
 
 interface RendererProps {
   schema: UIScreenNode;
+  /** Called when a button is pressed or a form is submitted */
   onAction: (action: string, formData?: Record<string, unknown>) => void;
+  /** Called when a field with autoSubmit changes (toggle, checkbox, select) */
+  onFieldChange?: (fieldId: string, value: unknown, allFormData: Record<string, unknown>) => void;
 }
 
 interface FormState {
@@ -37,10 +41,10 @@ interface FormState {
 }
 
 interface FormMeta {
-  [formId: string]: string; // formId -> submitAction
+  [formId: string]: string;
 }
 
-export function DSLRenderer({ schema, onAction }: RendererProps) {
+export function DSLRenderer({ schema, onAction, onFieldChange }: RendererProps) {
   const [formState, setFormState] = useState<FormState>({});
   const formMetaRef = React.useRef<FormMeta>({});
 
@@ -69,6 +73,27 @@ export function DSLRenderer({ schema, onAction }: RendererProps) {
     [formState, onAction]
   );
 
+  /** Handle auto-submit fields: update local state, then trigger onFieldChange */
+  const handleAutoSubmitField = useCallback(
+    (formId: string, fieldId: string, value: unknown) => {
+      setFormState((prev) => {
+        const updated = {
+          ...prev,
+          [formId]: {
+            ...(prev[formId] || {}),
+            [fieldId]: value,
+          },
+        };
+        // Fire onFieldChange after state update
+        if (onFieldChange) {
+          setTimeout(() => onFieldChange(fieldId, value, updated[formId] || {}), 0);
+        }
+        return updated;
+      });
+    },
+    [onFieldChange]
+  );
+
   function renderNode(node: UINode, currentFormId?: string): React.ReactNode {
     switch (node.type) {
       case 'screen':
@@ -83,6 +108,8 @@ export function DSLRenderer({ schema, onAction }: RendererProps) {
         return renderTextarea(node as UITextareaNode, currentFormId);
       case 'number_input':
         return renderNumberInput(node as UINumberInputNode, currentFormId);
+      case 'checkbox':
+        return renderCheckbox(node as UICheckboxNode, currentFormId);
       case 'toggle':
         return renderToggle(node as UIToggleNode, currentFormId);
       case 'button':
@@ -153,6 +180,7 @@ export function DSLRenderer({ schema, onAction }: RendererProps) {
           style={styles.input}
           value={value}
           placeholder={node.placeholder}
+          placeholderTextColor="#999"
           onChangeText={(text) => updateFormField(formId, node.id, text)}
           testID={`input-${node.id}`}
         />
@@ -170,6 +198,7 @@ export function DSLRenderer({ schema, onAction }: RendererProps) {
           style={[styles.input, styles.textarea]}
           value={value}
           placeholder={node.placeholder}
+          placeholderTextColor="#999"
           onChangeText={(text) => updateFormField(formId, node.id, text)}
           multiline
           numberOfLines={node.rows || 4}
@@ -187,8 +216,9 @@ export function DSLRenderer({ schema, onAction }: RendererProps) {
         {node.label && <Text style={styles.label}>{node.label}</Text>}
         <TextInput
           style={styles.input}
-          value={String(value)}
+          value={String(value === 0 ? '0' : value || '')}
           keyboardType="numeric"
+          placeholderTextColor="#999"
           onChangeText={(text) => {
             const num = parseFloat(text);
             updateFormField(formId, node.id, isNaN(num) ? text : num);
@@ -199,15 +229,34 @@ export function DSLRenderer({ schema, onAction }: RendererProps) {
     );
   }
 
+  function renderCheckbox(node: UICheckboxNode, currentFormId?: string): React.ReactNode {
+    const formId = currentFormId || '__global';
+    const value = getFormValue(formId, node.id, node.value ?? false) as boolean;
+    const handler = node.autoSubmit ? handleAutoSubmitField : updateFormField;
+    return (
+      <Pressable
+        style={styles.checkboxRow}
+        onPress={() => handler(formId, node.id, !value)}
+        testID={`checkbox-${node.id}`}
+      >
+        <View style={[styles.checkboxBox, value && styles.checkboxBoxChecked]}>
+          {value && <Text style={styles.checkboxCheck}>✓</Text>}
+        </View>
+        {node.label && <Text style={styles.checkboxLabel}>{node.label}</Text>}
+      </Pressable>
+    );
+  }
+
   function renderToggle(node: UIToggleNode, currentFormId?: string): React.ReactNode {
     const formId = currentFormId || '__global';
     const value = getFormValue(formId, node.id, node.value ?? false) as boolean;
+    const handler = node.autoSubmit ? handleAutoSubmitField : updateFormField;
     return (
       <View style={[styles.fieldContainer, styles.toggleRow]}>
         {node.label && <Text style={styles.label}>{node.label}</Text>}
         <Switch
           value={value}
-          onValueChange={(val) => updateFormField(formId, node.id, val)}
+          onValueChange={(val) => handler(formId, node.id, val)}
           testID={`toggle-${node.id}`}
         />
       </View>
@@ -227,7 +276,6 @@ export function DSLRenderer({ schema, onAction }: RendererProps) {
         ]}
         onPress={() => {
           if (currentFormId) {
-            // Button is inside a form — always collect form data
             const action = node.action === 'submit_form'
               ? (formMetaRef.current[currentFormId] || currentFormId)
               : node.action;
@@ -287,7 +335,7 @@ export function DSLRenderer({ schema, onAction }: RendererProps) {
   function renderSelect(node: UISelectNode, currentFormId?: string): React.ReactNode {
     const formId = currentFormId || '__global';
     const value = getFormValue(formId, node.id, node.value ?? '') as string;
-    // Simple select rendered as a list of pressable options for cross-platform compat
+    const handler = node.autoSubmit ? handleAutoSubmitField : updateFormField;
     return (
       <View style={styles.fieldContainer} testID={`select-${node.id}`}>
         {node.label && <Text style={styles.label}>{node.label}</Text>}
@@ -299,7 +347,7 @@ export function DSLRenderer({ schema, onAction }: RendererProps) {
                 styles.selectOption,
                 value === opt.value && styles.selectOptionActive,
               ]}
-              onPress={() => updateFormField(formId, node.id, opt.value)}
+              onPress={() => handler(formId, node.id, opt.value)}
               testID={`select-${node.id}-${opt.value}`}
             >
               <Text
@@ -320,7 +368,6 @@ export function DSLRenderer({ schema, onAction }: RendererProps) {
   function renderDatePicker(node: UIDatePickerNode, currentFormId?: string): React.ReactNode {
     const formId = currentFormId || '__global';
     const value = getFormValue(formId, node.id, node.value ?? '') as string;
-    // Simple date input (text-based for web/native compat)
     return (
       <View style={styles.fieldContainer}>
         {node.label && <Text style={styles.label}>{node.label}</Text>}
@@ -328,6 +375,7 @@ export function DSLRenderer({ schema, onAction }: RendererProps) {
           style={styles.input}
           value={value}
           placeholder="YYYY-MM-DD"
+          placeholderTextColor="#999"
           onChangeText={(text) => updateFormField(formId, node.id, text)}
           testID={`date-picker-${node.id}`}
           {...(Platform.OS === 'web' ? { type: 'date' } as Record<string, unknown> : {})}
@@ -408,6 +456,38 @@ const styles = StyleSheet.create({
   textarea: {
     minHeight: 100,
     textAlignVertical: 'top',
+  },
+  checkboxRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    marginBottom: 4,
+  },
+  checkboxBox: {
+    width: 22,
+    height: 22,
+    borderRadius: 4,
+    borderWidth: 2,
+    borderColor: '#ccc',
+    backgroundColor: '#fff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
+  },
+  checkboxBoxChecked: {
+    backgroundColor: '#007AFF',
+    borderColor: '#007AFF',
+  },
+  checkboxCheck: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '700',
+    lineHeight: 16,
+  },
+  checkboxLabel: {
+    fontSize: 15,
+    color: '#333',
+    flex: 1,
   },
   toggleRow: {
     flexDirection: 'row',

@@ -4,7 +4,7 @@ import { z } from 'zod';
 
 const uiComponentTypes = [
   'screen', 'section', 'text', 'input', 'textarea', 'number_input',
-  'toggle', 'button', 'form', 'list', 'list_item', 'card', 'select', 'date_picker',
+  'checkbox', 'toggle', 'button', 'form', 'list', 'list_item', 'card', 'select', 'date_picker',
 ] as const;
 
 // We use a lazy recursive schema since UI nodes can nest

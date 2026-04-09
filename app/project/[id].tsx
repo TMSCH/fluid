@@ -105,6 +105,15 @@ export default function ProjectScreen() {
     [id, processing, config.llm]
   );
 
+  const handleFieldChange = useCallback(
+    async (fieldId: string, value: unknown, allFormData: Record<string, unknown>) => {
+      if (!id || processing) return;
+      // Auto-submit field change to LLM (e.g. checkbox toggle, select change)
+      handleAction('field_change', { [fieldId]: value, ...allFormData });
+    },
+    [id, processing, handleAction]
+  );
+
   const handleSendMessage = useCallback(
     async (message: string) => {
       if (!id || processing) return;
@@ -230,7 +239,7 @@ export default function ProjectScreen() {
 
         {viewMode === 'app' && currentUI && (
           <View style={styles.flex}>
-            <DSLRenderer schema={currentUI} onAction={handleAction} />
+            <DSLRenderer schema={currentUI} onAction={handleAction} onFieldChange={handleFieldChange} />
           </View>
         )}
 
